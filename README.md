@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-beta-yellow)
 
-Wappalyzer-style domain scanner that detects **40+ technologies** across business websites — including CRM systems, marketing automation, ecommerce platforms, payment processors, analytics tools, and more. Scores each technology by value and optionally generates personalized outreach emails. Built for consultants, revops teams, and lead generation workflows.
+Wappalyzer-style domain scanner that detects **40+ technologies** across business websites — including CRM systems, marketing automation, ecommerce platforms, payment processors, analytics tools, and more. Scores each technology by value and optionally generates personalized outreach emails. Built for consultants, revops teams, and lead generation workflows. See [Supported Technologies](#supported-technologies) for the full list.
 
 > **Note**: This project is in **beta** status. The core scanning functionality is stable and actively used in production for lead generation workflows.
 
