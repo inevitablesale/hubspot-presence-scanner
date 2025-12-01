@@ -19,20 +19,56 @@ Optional Environment Variables:
     SUPABASE_TABLE: Table for scan results (default: hubspot_scans)
     SUPABASE_DOMAIN_TABLE: Table for domain tracking (default: domains_seen)
     APIFY_ACTOR: Apify actor ID (default: compass/crawler-google-places)
+    APIFY_MAX_PLACES: Max places to crawl per search (default: 1000)
     CATEGORIES_FILE: Path to categories JSON (default: config/categories-250.json)
     SCANNER_MAX_EMAIL_PAGES: Max pages to crawl for emails (default: 10)
     SCANNER_DISABLE_EMAILS: Set to 'true' to skip email extraction
     CATEGORY_OVERRIDE: Override the daily category selection
+    LOG_LEVEL: Logging level (default: INFO)
 """
 
 import json
+import logging
 import os
+import sys
+import time
 from datetime import date
 
 from apify_client import ApifyClient
 from supabase import create_client
 
 from hubspot_scanner import scan_domain
+
+
+# ---------- LOGGING SETUP ----------
+
+def setup_logging():
+    """Configure logging for Render deployment with detailed output."""
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    
+    # Create formatter with timestamp, level, and message
+    formatter = logging.Formatter(
+        fmt="%(asctime)s | %(levelname)-8s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    
+    # Configure root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, log_level, logging.INFO))
+    
+    # Clear existing handlers
+    root_logger.handlers.clear()
+    
+    # Add stdout handler (Render captures stdout)
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(formatter)
+    root_logger.addHandler(stdout_handler)
+    
+    return logging.getLogger("pipeline")
+
+
+# Initialize logger
+logger = setup_logging()
 
 
 # ---------- ENV & CLIENTS ----------
@@ -44,26 +80,53 @@ SUPABASE_DOMAIN_TABLE = os.getenv("SUPABASE_DOMAIN_TABLE", "domains_seen")
 
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 APIFY_ACTOR = os.getenv("APIFY_ACTOR", "compass/crawler-google-places")
+APIFY_MAX_PLACES = int(os.getenv("APIFY_MAX_PLACES", "1000"))
 
 CATEGORIES_FILE = os.getenv("CATEGORIES_FILE", "config/categories-250.json")
 SCANNER_MAX_EMAIL_PAGES = int(os.getenv("SCANNER_MAX_EMAIL_PAGES", "10"))
 SCANNER_DISABLE_EMAILS = os.getenv("SCANNER_DISABLE_EMAILS", "false").lower() == "true"
 
 
+def log_config():
+    """Log current configuration (without sensitive values)."""
+    logger.info("=" * 60)
+    logger.info("PIPELINE CONFIGURATION")
+    logger.info("=" * 60)
+    logger.info(f"  SUPABASE_URL: {'[SET]' if SUPABASE_URL else '[NOT SET]'}")
+    logger.info(f"  SUPABASE_SERVICE_KEY: {'[SET]' if SUPABASE_SERVICE_KEY else '[NOT SET]'}")
+    logger.info(f"  SUPABASE_TABLE: {SUPABASE_TABLE}")
+    logger.info(f"  SUPABASE_DOMAIN_TABLE: {SUPABASE_DOMAIN_TABLE}")
+    logger.info(f"  APIFY_TOKEN: {'[SET]' if APIFY_TOKEN else '[NOT SET]'}")
+    logger.info(f"  APIFY_ACTOR: {APIFY_ACTOR}")
+    logger.info(f"  APIFY_MAX_PLACES: {APIFY_MAX_PLACES}")
+    logger.info(f"  CATEGORIES_FILE: {CATEGORIES_FILE}")
+    logger.info(f"  SCANNER_MAX_EMAIL_PAGES: {SCANNER_MAX_EMAIL_PAGES}")
+    logger.info(f"  SCANNER_DISABLE_EMAILS: {SCANNER_DISABLE_EMAILS}")
+    logger.info("=" * 60)
+
+
 def get_supabase_client():
     """Create and return a Supabase client."""
+    logger.info("Initializing Supabase client...")
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        logger.error("Missing required environment variables: SUPABASE_URL and/or SUPABASE_SERVICE_KEY")
         raise ValueError(
             "SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables are required"
         )
-    return create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    logger.info("Supabase client initialized successfully")
+    return client
 
 
 def get_apify_client():
     """Create and return an Apify client."""
+    logger.info("Initializing Apify client...")
     if not APIFY_TOKEN:
+        logger.error("Missing required environment variable: APIFY_TOKEN")
         raise ValueError("APIFY_TOKEN environment variable is required")
-    return ApifyClient(APIFY_TOKEN)
+    client = ApifyClient(APIFY_TOKEN)
+    logger.info("Apify client initialized successfully")
+    return client
 
 
 # ---------- CATEGORY SELECTION ----------
@@ -71,18 +134,24 @@ def get_apify_client():
 
 def load_categories() -> list[str]:
     """Load categories from the JSON config file."""
+    logger.info(f"Loading categories from: {CATEGORIES_FILE}")
     try:
         with open(CATEGORIES_FILE, "r", encoding="utf-8") as f:
             categories = json.load(f)
             if not categories:
+                logger.error("Categories file is empty")
                 raise ValueError("Categories file is empty")
+            logger.info(f"Loaded {len(categories)} categories successfully")
+            logger.debug(f"First 5 categories: {categories[:5]}")
             return categories
     except FileNotFoundError:
+        logger.error(f"Categories file not found: {CATEGORIES_FILE}")
         raise FileNotFoundError(
             f"Categories file not found: {CATEGORIES_FILE}. "
             "Please ensure config/categories-250.json exists."
         )
     except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in categories file: {e}")
         raise ValueError(f"Invalid JSON in categories file: {e}")
 
 
@@ -99,11 +168,13 @@ def pick_today_category(categories: list[str]) -> str:
     """
     override = os.getenv("CATEGORY_OVERRIDE")
     if override:
-        print(f"[PIPELINE] Using category override: {override}")
+        logger.info(f"Using CATEGORY_OVERRIDE environment variable: {override}")
         return override
 
     idx = date.today().toordinal() % len(categories)
-    return categories[idx]
+    selected_category = categories[idx]
+    logger.info(f"Selected category index {idx} of {len(categories)}: '{selected_category}'")
+    return selected_category
 
 
 # ---------- APIFY / GOOGLE PLACES SCRAPE ----------
@@ -120,7 +191,10 @@ def get_domains_from_category(apify_client: ApifyClient, category: str) -> list[
     Returns:
         List of normalized domain strings
     """
-    print(f"[PIPELINE] Running category scrape: {category}")
+    logger.info("=" * 60)
+    logger.info("STEP: APIFY GOOGLE PLACES SCRAPE")
+    logger.info("=" * 60)
+    logger.info(f"Starting Google Places scrape for category: '{category}'")
 
     payload = {
         "countryCode": "us",
@@ -145,20 +219,37 @@ def get_domains_from_category(apify_client: ApifyClient, category: str) -> list[
         "reviewsFilterString": "",
         "reviewsOrigin": "all",
         "allPlacesNoSearchAction": "",
-        "maxCrawledPlacesPerSearch": 1000,
+        "maxCrawledPlacesPerSearch": APIFY_MAX_PLACES,
     }
 
+    logger.info(f"Apify actor: {APIFY_ACTOR}")
+    logger.info(f"Max places per search: {APIFY_MAX_PLACES}")
+    logger.info("Calling Apify actor... (this may take several minutes)")
+    
+    start_time = time.time()
     run = apify_client.actor(APIFY_ACTOR).call(run_input=payload)
+    elapsed = time.time() - start_time
+    
+    logger.info(f"Apify actor completed in {elapsed:.1f} seconds")
+    logger.info(f"Run ID: {run.get('id', 'N/A')}")
+    logger.info(f"Dataset ID: {run.get('defaultDatasetId', 'N/A')}")
+    
+    logger.info("Fetching dataset items...")
     dataset_items = list(
         apify_client.dataset(run["defaultDatasetId"]).iterate_items()
     )
 
-    print(f"[PIPELINE] Category '{category}' returned {len(dataset_items)} places")
+    logger.info(f"Retrieved {len(dataset_items)} places from Google Places")
 
+    # Extract domains
+    logger.info("Extracting and normalizing domains...")
     domains = []
+    domains_without_website = 0
+    
     for item in dataset_items:
         url = item.get("website")
         if not url:
+            domains_without_website += 1
             continue
         # Normalize domain
         url = url.replace("https://", "").replace("http://", "")
@@ -169,6 +260,9 @@ def get_domains_from_category(apify_client: ApifyClient, category: str) -> list[
         if url:
             domains.append(url)
 
+    logger.info(f"Places without website: {domains_without_website}")
+    logger.info(f"Places with website: {len(domains)}")
+
     # Remove duplicates while preserving order
     seen = set()
     unique_domains = []
@@ -177,7 +271,13 @@ def get_domains_from_category(apify_client: ApifyClient, category: str) -> list[
             seen.add(d)
             unique_domains.append(d)
 
-    print(f"[PIPELINE] Extracted {len(unique_domains)} unique domains with websites")
+    duplicates_removed = len(domains) - len(unique_domains)
+    logger.info(f"Duplicate domains removed: {duplicates_removed}")
+    logger.info(f"Unique domains extracted: {len(unique_domains)}")
+    
+    if unique_domains:
+        logger.debug(f"Sample domains (first 10): {unique_domains[:10]}")
+    
     return unique_domains
 
 
@@ -196,28 +296,47 @@ def filter_new_domains(supabase, domains: list[str], category: str) -> list[str]
     Returns:
         List of new (not previously seen) domain strings
     """
+    logger.info("=" * 60)
+    logger.info("STEP: DOMAIN DEDUPLICATION")
+    logger.info("=" * 60)
+    
     if not domains:
+        logger.warning("No domains provided for deduplication")
         return []
 
+    logger.info(f"Checking {len(domains)} domains against Supabase table: {SUPABASE_DOMAIN_TABLE}")
+    
     # Single roundtrip: check which exist
+    logger.info("Querying Supabase for existing domains...")
+    start_time = time.time()
     res = (
         supabase.table(SUPABASE_DOMAIN_TABLE)
         .select("domain")
         .in_("domain", domains)
         .execute()
     )
+    elapsed = time.time() - start_time
+    logger.info(f"Supabase query completed in {elapsed:.2f} seconds")
 
     seen = {row["domain"] for row in (res.data or [])}
     new_domains = [d for d in domains if d not in seen]
 
-    print(f"[PIPELINE] {len(new_domains)} new domains (out of {len(domains)})")
+    logger.info(f"Domains already in database: {len(seen)}")
+    logger.info(f"New domains to process: {len(new_domains)}")
+    
+    if new_domains:
+        logger.debug(f"Sample new domains (first 10): {new_domains[:10]}")
 
     # Upsert new domains into domains_seen
     if new_domains:
+        logger.info(f"Inserting {len(new_domains)} new domains into {SUPABASE_DOMAIN_TABLE}...")
         rows = [{"domain": d, "category": category} for d in new_domains]
+        start_time = time.time()
         supabase.table(SUPABASE_DOMAIN_TABLE).upsert(
             rows, on_conflict="domain"
         ).execute()
+        elapsed = time.time() - start_time
+        logger.info(f"Domain insertion completed in {elapsed:.2f} seconds")
 
     return new_domains
 
@@ -245,6 +364,7 @@ def save_scan_result(supabase, result: dict, category: str) -> None:
         "error": result.get("error"),
     }
     supabase.table(SUPABASE_TABLE).insert(row).execute()
+    logger.debug(f"Saved scan result for {result['domain']} to {SUPABASE_TABLE}")
 
 
 def run_hubspot_scans(supabase, domains: list[str], category: str) -> list[dict]:
@@ -259,9 +379,23 @@ def run_hubspot_scans(supabase, domains: list[str], category: str) -> list[dict]
     Returns:
         List of scan result dictionaries
     """
+    logger.info("=" * 60)
+    logger.info("STEP: HUBSPOT SCANNING")
+    logger.info("=" * 60)
+    logger.info(f"Starting HubSpot scans for {len(domains)} domains")
+    logger.info(f"Email crawling: {'DISABLED' if SCANNER_DISABLE_EMAILS else 'ENABLED'}")
+    logger.info(f"Max email pages per domain: {SCANNER_MAX_EMAIL_PAGES}")
+    
     results = []
+    hubspot_detected_count = 0
+    error_count = 0
+    total_emails_found = 0
+    scan_start_time = time.time()
+    
     for idx, domain in enumerate(domains, start=1):
-        print(f"[SCAN] ({idx}/{len(domains)}) {domain}")
+        domain_start_time = time.time()
+        logger.info(f"[{idx}/{len(domains)}] Scanning: {domain}")
+        
         try:
             # Run the HubSpot scanner
             result = scan_domain(
@@ -274,14 +408,25 @@ def run_hubspot_scans(supabase, domains: list[str], category: str) -> list[dict]
             result_dict = result.to_dict()
             results.append(result_dict)
             save_scan_result(supabase, result_dict, category)
+            
+            domain_elapsed = time.time() - domain_start_time
 
             if result.hubspot_detected:
-                print(f"  ✓ HubSpot detected (confidence: {result.confidence_score}%)")
+                hubspot_detected_count += 1
+                email_count = len(result.emails) if result.emails else 0
+                total_emails_found += email_count
+                logger.info(f"  ✓ HubSpot DETECTED (confidence: {result.confidence_score}%, emails: {email_count}) [{domain_elapsed:.1f}s]")
+                if result.portal_ids:
+                    logger.info(f"    Portal IDs: {result.portal_ids}")
                 if result.emails:
-                    print(f"  ✓ Emails: {', '.join(result.emails)}")
+                    logger.info(f"    Emails: {', '.join(result.emails)}")
+            else:
+                logger.info(f"  ✗ HubSpot not detected [{domain_elapsed:.1f}s]")
 
         except Exception as e:
-            print(f"[ERROR] scan failed for {domain}: {e}")
+            error_count += 1
+            domain_elapsed = time.time() - domain_start_time
+            logger.error(f"  ✗ SCAN FAILED for {domain}: {e} [{domain_elapsed:.1f}s]")
             err_result = {
                 "domain": domain,
                 "hubspot_detected": False,
@@ -293,7 +438,23 @@ def run_hubspot_scans(supabase, domains: list[str], category: str) -> list[dict]
             }
             save_scan_result(supabase, err_result, category)
             results.append(err_result)
+        
+        # Log progress every 10 domains
+        if idx % 10 == 0:
+            elapsed = time.time() - scan_start_time
+            rate = idx / elapsed if elapsed > 0 else 0
+            remaining = len(domains) - idx
+            eta = remaining / rate if rate > 0 else 0
+            logger.info(f"  >> Progress: {idx}/{len(domains)} domains scanned | Rate: {rate:.1f}/s | ETA: {eta:.0f}s")
 
+    total_elapsed = time.time() - scan_start_time
+    logger.info("-" * 60)
+    logger.info(f"HubSpot scanning completed in {total_elapsed:.1f} seconds")
+    logger.info(f"  Total domains scanned: {len(domains)}")
+    logger.info(f"  HubSpot detected: {hubspot_detected_count}")
+    logger.info(f"  Scan errors: {error_count}")
+    logger.info(f"  Total emails found: {total_emails_found}")
+    
     return results
 
 
@@ -302,48 +463,80 @@ def run_hubspot_scans(supabase, domains: list[str], category: str) -> list[dict]
 
 def main():
     """Main pipeline entrypoint."""
-    print("[PIPELINE] Starting daily run")
-    print(f"[PIPELINE] Date: {date.today().isoformat()}")
+    pipeline_start_time = time.time()
+    
+    logger.info("=" * 60)
+    logger.info("PIPELINE WORKER STARTING")
+    logger.info("=" * 60)
+    logger.info(f"Date: {date.today().isoformat()}")
+    logger.info(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+    
+    # Log configuration
+    log_config()
 
-    # Initialize clients
-    supabase = get_supabase_client()
-    apify_client = get_apify_client()
+    try:
+        # Initialize clients
+        logger.info("=" * 60)
+        logger.info("STEP: INITIALIZING CLIENTS")
+        logger.info("=" * 60)
+        supabase = get_supabase_client()
+        apify_client = get_apify_client()
 
-    # Load and select category
-    categories = load_categories()
-    category = pick_today_category(categories)
-    category_idx = categories.index(category) if category in categories else -1
-    print(f"[PIPELINE] Today's category: {category} (index {category_idx})")
+        # Load and select category
+        logger.info("=" * 60)
+        logger.info("STEP: CATEGORY SELECTION")
+        logger.info("=" * 60)
+        categories = load_categories()
+        category = pick_today_category(categories)
+        category_idx = categories.index(category) if category in categories else -1
+        logger.info(f"Today's category: '{category}' (index {category_idx} of {len(categories)})")
 
-    # Scrape Google Places
-    domains = get_domains_from_category(apify_client, category)
+        # Scrape Google Places
+        domains = get_domains_from_category(apify_client, category)
 
-    if not domains:
-        print("[PIPELINE] No domains found. Exiting.")
-        return
+        if not domains:
+            logger.warning("No domains found from Google Places scrape. Exiting pipeline.")
+            return
 
-    # Deduplicate against Supabase
-    new_domains = filter_new_domains(supabase, domains, category)
+        # Deduplicate against Supabase
+        new_domains = filter_new_domains(supabase, domains, category)
 
-    if not new_domains:
-        print("[PIPELINE] No new domains to scan. Exiting.")
-        return
+        if not new_domains:
+            logger.info("All domains have been previously processed. No new domains to scan.")
+            logger.info("Pipeline completed successfully (no work needed)")
+            return
 
-    # Run HubSpot scans
-    results = run_hubspot_scans(supabase, new_domains, category)
+        # Run HubSpot scans
+        results = run_hubspot_scans(supabase, new_domains, category)
 
-    # Print summary
-    hubspot_count = sum(1 for r in results if r.get("hubspot_detected"))
-    email_count = sum(len(r.get("emails", [])) for r in results)
+        # Print summary
+        pipeline_elapsed = time.time() - pipeline_start_time
+        hubspot_count = sum(1 for r in results if r.get("hubspot_detected"))
+        email_count = sum(len(r.get("emails", [])) for r in results)
+        error_count = sum(1 for r in results if r.get("error"))
 
-    print("\n" + "=" * 50)
-    print("[PIPELINE] Daily run complete")
-    print(f"  Category: {category}")
-    print(f"  Domains scraped: {len(domains)}")
-    print(f"  New domains scanned: {len(new_domains)}")
-    print(f"  HubSpot detected: {hubspot_count}")
-    print(f"  Emails extracted: {email_count}")
-    print("=" * 50)
+        logger.info("=" * 60)
+        logger.info("PIPELINE RUN COMPLETE")
+        logger.info("=" * 60)
+        logger.info(f"  Category: {category}")
+        logger.info(f"  Total time: {pipeline_elapsed:.1f} seconds")
+        logger.info(f"  Domains from Google Places: {len(domains)}")
+        logger.info(f"  New domains scanned: {len(new_domains)}")
+        logger.info(f"  HubSpot detected: {hubspot_count} ({hubspot_count/len(new_domains)*100:.1f}% detection rate)")
+        logger.info(f"  Emails extracted: {email_count}")
+        logger.info(f"  Scan errors: {error_count}")
+        logger.info("=" * 60)
+        logger.info("Pipeline worker finished successfully!")
+        
+    except Exception as e:
+        pipeline_elapsed = time.time() - pipeline_start_time
+        logger.error("=" * 60)
+        logger.error("PIPELINE FAILED")
+        logger.error("=" * 60)
+        logger.error(f"Error: {e}")
+        logger.error(f"Time before failure: {pipeline_elapsed:.1f} seconds")
+        logger.exception("Full traceback:")
+        raise
 
 
 if __name__ == "__main__":

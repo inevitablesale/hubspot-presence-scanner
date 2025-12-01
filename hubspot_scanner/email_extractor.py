@@ -1,11 +1,75 @@
 """Email extraction and filtering functionality."""
 
+import json
+import logging
+import os
 import re
 from typing import Set
 from urllib.parse import urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
+
+
+logger = logging.getLogger(__name__)
+
+# Path to disposable/honeypot email domains blocklist
+BLOCKLIST_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)),
+    "config",
+    "disposable_email_blocklist.json"
+)
+
+# Cache for loaded blocklist
+_disposable_domains_cache: frozenset | None = None
+
+
+def load_disposable_domains() -> frozenset:
+    """
+    Load the disposable/honeypot email domains blocklist.
+    
+    Returns:
+        Frozenset of blocked domain names
+    """
+    global _disposable_domains_cache
+    
+    if _disposable_domains_cache is not None:
+        return _disposable_domains_cache
+    
+    try:
+        with open(BLOCKLIST_PATH, "r", encoding="utf-8") as f:
+            domains = json.load(f)
+            _disposable_domains_cache = frozenset(domains)
+            logger.debug(f"Loaded {len(_disposable_domains_cache)} disposable email domains")
+            return _disposable_domains_cache
+    except FileNotFoundError:
+        logger.warning(f"Disposable email blocklist not found: {BLOCKLIST_PATH}")
+        _disposable_domains_cache = frozenset()
+        return _disposable_domains_cache
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in blocklist file: {e}")
+        _disposable_domains_cache = frozenset()
+        return _disposable_domains_cache
+
+
+def is_disposable_email(email: str) -> bool:
+    """
+    Check if an email is from a disposable/honeypot domain.
+    
+    Args:
+        email: Email address to check
+        
+    Returns:
+        True if the email is from a disposable domain, False otherwise
+    """
+    if "@" not in email:
+        return False
+    parts = email.lower().split("@")
+    if len(parts) != 2 or not parts[1]:
+        return False
+    email_domain = parts[1]
+    disposable_domains = load_disposable_domains()
+    return email_domain in disposable_domains
 
 
 # Generic email prefixes to exclude
@@ -78,6 +142,11 @@ def is_valid_email(email: str, domain: str) -> bool:
 
     # Skip generic emails
     if is_generic_email(email_lower):
+        return False
+
+    # Skip disposable/honeypot email domains
+    if is_disposable_email(email_lower):
+        logger.debug(f"Skipping disposable email: {email_lower}")
         return False
 
     # Skip obviously fake or example emails

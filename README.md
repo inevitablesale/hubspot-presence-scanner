@@ -136,12 +136,21 @@ The scanner looks for these HubSpot signatures:
 
 ## Email Filtering
 
-When HubSpot is detected, the scanner crawls the site for email addresses. Generic emails are automatically excluded:
+When HubSpot is detected, the scanner crawls the site for email addresses. The following emails are automatically excluded:
 
+### Generic Email Prefixes
 - info@, support@, admin@
 - hello@, sales@, contact@
 - help@, noreply@, webmaster@
 - office@, team@, general@
+
+### Disposable/Honeypot Domains
+The scanner filters out emails from disposable and honeypot email services (e.g., mailinator.com, guerrillamail.com, tempmail.net). The blocklist contains 5,500+ domains from multiple community-maintained sources.
+
+To update the blocklist:
+```bash
+python scripts/update_disposable_blocklist.py
+```
 
 ## CLI Options
 
@@ -328,12 +337,32 @@ create table domains_seen (
 
 Set these in the Render dashboard:
 
+#### Required Variables
 | Variable | Description |
 |----------|-------------|
 | `SUPABASE_URL` | Your Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Supabase service role key (secret) |
 | `APIFY_TOKEN` | Apify API token (secret) |
 | `SMTP_ACCOUNTS_JSON` | JSON array of SMTP inbox configs (secret) |
+
+#### Optional Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LOG_LEVEL` | `INFO` | Logging verbosity (DEBUG, INFO, WARNING, ERROR) |
+| `APIFY_MAX_PLACES` | `1000` | Max places to crawl per Google Places search |
+| `APIFY_ACTOR` | `compass/crawler-google-places` | Apify actor ID |
+| `SUPABASE_TABLE` | `hubspot_scans` | Table for scan results |
+| `SUPABASE_DOMAIN_TABLE` | `domains_seen` | Table for domain tracking |
+| `CATEGORIES_FILE` | `config/categories-250.json` | Path to categories JSON |
+| `SCANNER_MAX_EMAIL_PAGES` | `10` | Max pages to crawl for emails per domain |
+| `SCANNER_DISABLE_EMAILS` | `false` | Set to 'true' to skip email extraction |
+| `CATEGORY_OVERRIDE` | - | Override the daily category selection |
+| `OUTREACH_TABLE` | `hubspot_scans` | Table with leads |
+| `OUTREACH_DAILY_LIMIT` | `500` | Max emails per day |
+| `OUTREACH_PER_INBOX_LIMIT` | `50` | Max emails per SMTP inbox |
+| `OUTREACH_EMAIL_TEMPLATE` | `templates/outreach_email.txt` | Path to email template |
+| `OUTREACH_SUBJECT` | `Quick question about your website` | Email subject line |
+| `SMTP_SEND_DELAY_SECONDS` | `4` | Delay between emails in seconds |
 
 ### Deploy to Render
 
