@@ -1,21 +1,21 @@
-# HubSpot Presence Scanner
+# Tech Stack Scanner
 
 ![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-beta-yellow)
 
-Lightweight domain crawler that detects HubSpot usage across business websites by scanning for tracking codes, COS signatures, embedded forms, script tags, and API endpoints. When HubSpot is detected, it also crawls the site to find non-generic email addresses. Built for consultants, revops teams, and automation workflows that need to identify HubSpot-powered organizations at scale.
+Wappalyzer-style domain scanner that detects **40+ technologies** across business websites — including CRM systems, marketing automation, ecommerce platforms, payment processors, analytics tools, and more. Scores each technology by value and optionally generates personalized outreach emails. Built for consultants, revops teams, and lead generation workflows.
 
 > **Note**: This project is in **beta** status. The core scanning functionality is stable and actively used in production for lead generation workflows.
 
 ## Features
 
-- **HubSpot Detection**: Scans HTML, script tags, metadata, and HTTP headers for HubSpot signatures
-- **Confidence Scoring**: Returns a 0-100 confidence score based on detected signals
-- **Portal ID Extraction**: Identifies HubSpot portal IDs when available
-- **Email Extraction**: Crawls sites with HubSpot to find non-generic business emails
+- **Multi-Technology Detection**: Detects 40+ technologies including HubSpot, Salesforce, Shopify, Stripe, and more
+- **Technology Scoring**: Scores each technology 1-5 based on value and specialization
+- **Automated Email Generation**: Generates personalized outreach emails based on detected stack
+- **Email Extraction**: Crawls sites to find non-generic business email addresses
 - **Generic Email Filtering**: Automatically excludes info@, support@, admin@, hello@, sales@, etc.
-- **JSON Output**: Structured output with domain, signals, emails, and confidence scores
+- **JSON Output**: Structured output with technologies, scores, and generated emails
 - **CLI & Library**: Use as command-line tool or import as Python library
 
 ## Installation
@@ -35,32 +35,6 @@ pip install -e .
 ## Quick Start
 
 ### Command Line
-
-```bash
-# Scan a single domain
-hubspot-scanner hubspot.com
-
-# Scan multiple domains
-hubspot-scanner hubspot.com drift.com example.com
-
-# Scan domains from a file
-hubspot-scanner -f examples/domains.txt
-
-# Save results to JSON file
-hubspot-scanner -f examples/domains.txt -o results.json
-
-# Skip email extraction (faster)
-hubspot-scanner hubspot.com --no-emails
-
-# Increase pages crawled for emails
-hubspot-scanner hubspot.com --max-pages 20
-```
-
-## Multi-Technology Scanner (NEW)
-
-The scanner now includes Wappalyzer-style detection for 40+ technologies, with scoring and automated email generation for outreach.
-
-### Technology Detection
 
 ```bash
 # Scan a domain for all technologies
@@ -162,6 +136,30 @@ Technologies are scored by value/specialization (1-5 scale):
 
 ## HubSpot-Specific Scanner
 
+For HubSpot-only detection with confidence scoring and portal ID extraction, use the dedicated `hubspot-scanner` CLI:
+
+### Command Line
+
+```bash
+# Scan a single domain
+hubspot-scanner hubspot.com
+
+# Scan multiple domains
+hubspot-scanner hubspot.com drift.com example.com
+
+# Scan domains from a file
+hubspot-scanner -f examples/domains.txt
+
+# Save results to JSON file
+hubspot-scanner -f examples/domains.txt -o results.json
+
+# Skip email extraction (faster)
+hubspot-scanner hubspot.com --no-emails
+
+# Increase pages crawled for emails
+hubspot-scanner hubspot.com --max-pages 20
+```
+
 ### Python Library
 
 ```python
@@ -180,7 +178,7 @@ for r in results:
         print(f"{r['domain']}: {r['confidence_score']}% - Emails: {r['emails']}")
 ```
 
-## Output Format
+### HubSpot Output Format
 
 The scanner outputs structured JSON with the following fields:
 
@@ -215,7 +213,7 @@ The scanner outputs structured JSON with the following fields:
 | `emails` | array | Non-generic emails found (only if HubSpot detected) |
 | `error` | string/null | Error message if scan failed |
 
-## Detection Signals
+### HubSpot Detection Signals
 
 The scanner looks for these HubSpot signatures:
 
@@ -254,9 +252,11 @@ The scanner looks for these HubSpot signatures:
 - `X-HS-Content-Id` - HubSpot content ID header
 - `X-HS-Cache-Config` - HubSpot cache configuration header
 
+---
+
 ## Email Filtering
 
-When HubSpot is detected, the scanner crawls the site for email addresses. The following emails are automatically excluded:
+When scanning sites, the scanner crawls for email addresses and automatically filters out non-valuable contacts:
 
 ### Generic Email Prefixes
 - info@, support@, admin@
@@ -272,7 +272,29 @@ To update the blocklist:
 python scripts/update_disposable_blocklist.py
 ```
 
-## CLI Options
+## CLI Reference
+
+### tech-scanner (Multi-Technology)
+
+```
+usage: tech-scanner [-h] [-f DOMAINS_FILE] [-o OUTPUT_FILE] [-t TIMEOUT]
+                    [--no-email] [--name NAME] [--location LOCATION]
+                    [--rate RATE] [-v]
+                    [domains ...]
+
+Options:
+  domains               Domain(s) to scan
+  -f, --file            File containing domains (one per line)
+  -o, --output          Output file for JSON results
+  -t, --timeout         Request timeout in seconds (default: 10)
+  --no-email            Skip outreach email generation
+  --name                Consultant name for email personalization
+  --location            Consultant location for email personalization
+  --rate                Consultant rate for email personalization
+  -v, --version         Show version
+```
+
+### hubspot-scanner (HubSpot-Specific)
 
 ```
 usage: hubspot-scanner [-h] [-f DOMAINS_FILE] [-o OUTPUT_FILE] [-t TIMEOUT]
@@ -312,10 +334,10 @@ The `daily_pipeline.py` script implements an end-to-end automated pipeline that:
 
 1. **Scrapes Google Places** - Uses Apify's Compass crawler to find businesses by category
 2. **Deduplicates domains** - Tracks processed domains to avoid rescanning
-3. **Scans for HubSpot** - Detects HubSpot presence and extracts portal IDs
-4. **Extracts emails** - Crawls sites with HubSpot to find non-generic contact emails
+3. **Scans for technologies** - Detects technology stack and extracts relevant signals
+4. **Extracts emails** - Crawls sites to find non-generic contact emails
 5. **Saves structured leads** - Outputs JSON records with all lead data
-6. **Sends outreach** - Optionally sends emails through Zapmail pre-warmed inboxes
+6. **Sends outreach** - Optionally sends personalized emails through Zapmail pre-warmed inboxes
 
 ### Pipeline Usage
 
@@ -358,12 +380,12 @@ To enable email sending, create a `zapmail_config.json` file (see `zapmail_confi
 
 ## Use Cases
 
-- **Lead Generation**: Find HubSpot users and extract contact emails
-- **Competitive Analysis**: Identify which competitors use HubSpot
-- **Market Research**: Survey HubSpot adoption across industries
-- **Integration Planning**: Identify potential integration partners
-- **RevOps Workflows**: Automate HubSpot user identification
-- **Automated Outreach**: Daily pipeline for discovering and contacting prospects
+- **Lead Generation**: Identify businesses using specific technologies and extract contact emails
+- **Technology Profiling**: Discover the complete tech stack of target companies
+- **Competitive Analysis**: Survey technology adoption across industries or competitors
+- **Partnership Targeting**: Find companies using complementary technologies
+- **RevOps Workflows**: Automate technology-based lead qualification
+- **Automated Outreach**: Daily pipeline for discovering and contacting technology-matched prospects
 
 ## Render Deployment
 
@@ -377,30 +399,30 @@ The system consists of two workers running as daily cron jobs:
    - Scrapes Google Places for one business category (rotates through 250 categories)
    - Extracts and normalizes domains
    - Deduplicates against Supabase history
-   - Scans each domain for HubSpot presence
+   - Scans each domain for technology stack
    - Extracts non-generic contact emails
    - Stores results in Supabase
 
 2. **Outreach Worker** (`outreach_worker.py`) - Runs at 2:00 PM UTC
-   - Pulls HubSpot-detected leads with emails
+   - Pulls leads with detected technologies and valid emails
    - Rotates through Zapmail pre-warmed SMTP inboxes
    - Sends personalized outreach emails (350-500/day)
    - Marks leads as emailed in Supabase
 
 ### 📩 Automated Outreach Email (What the System Sends)
 
-When the outreach worker runs, it selects HubSpot-detected domains with valid non-generic contact emails and sends a personalized outreach message through your Zapmail warmed inbox fleet.
+When the outreach worker runs, it selects domains with detected technologies and valid non-generic contact emails, then sends a personalized outreach message through your Zapmail warmed inbox fleet.
 
-The outreach email is intentionally simple, friendly, and relevant to the signal the scanner found.
+The outreach email is intentionally simple, friendly, and relevant to the technology signals the scanner found.
 
 **Default Outreach Template (`templates/outreach_email.txt`):**
 
 ```
 Hey there,
 
-I was reviewing {{domain}} and noticed that your website is running HubSpot — specifically a few tracking and COS (Content Optimization System) components that usually indicate there may be hidden optimization opportunities.
+I was reviewing {{domain}} and noticed your tech stack — specifically some tracking and automation components that usually indicate there may be hidden optimization opportunities.
 
-I run a daily HubSpot Presence Scanner that identifies technical gaps, workflow friction points, and automation leaks. If you'd like, I can share a quick breakdown of what the scanner found for your domain along with a couple of improvements that typically move the needle fast.
+I run a daily Tech Stack Scanner that identifies technical gaps, workflow friction points, and automation leaks. If you'd like, I can share a quick breakdown of what the scanner found for your domain along with a couple of improvements that typically move the needle fast.
 
 No pressure at all — happy to point you in the right direction.
 
@@ -418,8 +440,8 @@ No pressure at all — happy to point you in the right direction.
 
 The email references:
 
-- HubSpot usage (already confirmed by your scanner)
-- Specific findings (signals + portal IDs)
+- Detected technologies (confirmed by your scanner)
+- Specific findings (signals + tech details)
 - A clear value proposition
 - A real person (Chris) offering expertise
 
