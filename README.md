@@ -1,6 +1,12 @@
 # HubSpot Presence Scanner
 
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Status](https://img.shields.io/badge/status-beta-yellow)
+
 Lightweight domain crawler that detects HubSpot usage across business websites by scanning for tracking codes, COS signatures, embedded forms, script tags, and API endpoints. When HubSpot is detected, it also crawls the site to find non-generic email addresses. Built for consultants, revops teams, and automation workflows that need to identify HubSpot-powered organizations at scale.
+
+> **Note**: This project is in **beta** status. The core scanning functionality is stable and actively used in production for lead generation workflows.
 
 ## Features
 
