@@ -17,6 +17,9 @@ from .tech_scorer import ScoredTechnology, get_highest_value_tech
 
 
 # Consultant profile configuration
+# Note: "positioning" was updated from "short-term technical consultant" to
+# "freelance technical specialist" to better match the problem statement's
+# framing of Chris as a freelance specialist for short-term, high-impact work.
 CONSULTANT_PROFILE = {
     "name": "Chris",
     "location": "Richmond, VA",
@@ -567,7 +570,7 @@ I'm {p['name']} — freelance {main_tech} specialist based in {p['location']}.
 
 I recently helped a client who {recent_project}. It's the kind of short-term, high-impact work I focus on — quick fixes and clean implementations, no long-term commitment required.
 
-I take on small but important tasks that often get stuck in backlogs: checkout fixes, automation cleanup, event tracking repairs, webhook repairs, form→CRM routing fixes, segmentation and flow issues, hosting and CDN configs, and API integrations. My rate is {p['hourly_rate']} for direct technical work with no agency overhead.
+I take on small but important tasks that often get stuck in backlogs: checkout fixes, automation cleanup, event tracking repairs, webhook repairs, and form→CRM routing. I also handle segmentation, hosting/CDN configs, and API integrations. My rate is {p['hourly_rate']} for direct technical work with no agency overhead.
 
 I also work with {other_tech_1} and {other_tech_2} if you ever need help in those areas.
 
@@ -740,7 +743,10 @@ def generate_outreach_email_ab(
     # Generate A/B emails
     email_ab = generate_email_ab(top_tech.name, technologies, profile)
     if not email_ab:
-        # Fall back to legacy email if tech not in new categories
+        # Fall back to legacy email generation if the detected technology
+        # is not in the new 12-category system. In this case, both versions
+        # use the same email body since the legacy system doesn't support A/B.
+        # This is intentional for backwards compatibility with edge cases.
         legacy = generate_outreach_email(domain, technologies, profile)
         if legacy:
             return {
@@ -749,7 +755,7 @@ def generate_outreach_email_ab(
                 "category": top_tech.category,
                 "subject_lines": legacy.subject_lines,
                 "version_a": legacy.email_body,
-                "version_b": legacy.email_body,  # Same as A for legacy
+                "version_b": legacy.email_body,
                 "other_tech_1": technologies[1] if len(technologies) > 1 else "N/A",
                 "other_tech_2": technologies[2] if len(technologies) > 2 else "N/A",
             }
