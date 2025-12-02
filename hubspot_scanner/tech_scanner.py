@@ -166,9 +166,6 @@ def scan_technologies(
             error=error,
         )
 
-    # Extract emails from the page (do this once, regardless of technology detection)
-    extracted_emails = sorted(extract_emails_from_html(html_content, domain))
-
     # Detect technologies
     detector = TechDetector()
     detection_result = detector.detect(domain, html_content, headers)
@@ -178,8 +175,10 @@ def scan_technologies(
             domain=domain,
             technologies=[],
             scored_technologies=[],
-            emails=extracted_emails,
         )
+
+    # Extract emails only when technologies are detected
+    extracted_emails = sorted(extract_emails_from_html(html_content, domain))
 
     # Score technologies
     scored = score_technologies(detection_result.technologies)
