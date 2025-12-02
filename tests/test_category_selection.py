@@ -8,24 +8,41 @@ These tests verify that:
 """
 
 import os
-import sys
-from datetime import date, timedelta
+from datetime import date
 from unittest.mock import MagicMock, patch
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def reset_env():
+    """Reset environment variables and reimport module for each test."""
+    # Store original env vars
+    original_env = dict(os.environ)
+    
+    yield
+    
+    # Restore original env vars
+    os.environ.clear()
+    os.environ.update(original_env)
+
+
+@pytest.fixture
+def pipeline_worker():
+    """Import and return a fresh pipeline_worker module."""
+    import importlib
+    import pipeline_worker as pw
+    importlib.reload(pw)
+    return pw
 
 
 class TestCategorySelection:
     """Test category selection with cooldown enforcement."""
 
-    def test_pick_today_category_with_override(self):
+    def test_pick_today_category_with_override(self, pipeline_worker):
         """Test that CATEGORY_OVERRIDE environment variable is respected."""
-        # Import the module after setting up mocks
         with patch.dict(os.environ, {"CATEGORY_OVERRIDE": "test_category"}):
-            # Reimport to pick up env var
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             categories = ["cat1", "cat2", "cat3"]
@@ -33,11 +50,10 @@ class TestCategorySelection:
             
             assert result == "test_category"
 
-    def test_pick_today_category_deterministic_without_supabase(self):
+    def test_pick_today_category_deterministic_without_supabase(self, pipeline_worker):
         """Test deterministic category selection when no Supabase client."""
         with patch.dict(os.environ, {"CATEGORY_OVERRIDE": ""}, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             categories = ["cat1", "cat2", "cat3", "cat4", "cat5"]
@@ -52,14 +68,13 @@ class TestCategorySelection:
             result2 = pipeline_worker.pick_today_category(categories, None)
             assert result == result2
 
-    def test_pick_today_category_skips_recently_used(self):
+    def test_pick_today_category_skips_recently_used(self, pipeline_worker):
         """Test that recently used categories are skipped."""
         with patch.dict(os.environ, {
             "CATEGORY_OVERRIDE": "",
             "CATEGORY_COOLDOWN_DAYS": "7"
         }, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             categories = ["cat1", "cat2", "cat3", "cat4", "cat5"]
@@ -81,14 +96,13 @@ class TestCategorySelection:
             # Should not select the recently used category
             assert result != deterministic_cat or len(categories) == 1
 
-    def test_pick_today_category_fallback_when_all_used(self):
+    def test_pick_today_category_fallback_when_all_used(self, pipeline_worker):
         """Test fallback to deterministic when all categories are in cooldown."""
         with patch.dict(os.environ, {
             "CATEGORY_OVERRIDE": "",
             "CATEGORY_COOLDOWN_DAYS": "7"
         }, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             categories = ["cat1", "cat2", "cat3"]
@@ -106,14 +120,13 @@ class TestCategorySelection:
             deterministic_cat = categories[deterministic_idx]
             assert result == deterministic_cat
 
-    def test_cooldown_disabled_when_zero(self):
+    def test_cooldown_disabled_when_zero(self, pipeline_worker):
         """Test that cooldown is disabled when CATEGORY_COOLDOWN_DAYS=0."""
         with patch.dict(os.environ, {
             "CATEGORY_OVERRIDE": "",
             "CATEGORY_COOLDOWN_DAYS": "0"
         }, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             categories = ["cat1", "cat2", "cat3"]
@@ -130,11 +143,10 @@ class TestCategorySelection:
 class TestGetRecentlyUsedCategories:
     """Test recently used categories lookup."""
 
-    def test_returns_empty_when_cooldown_zero(self):
+    def test_returns_empty_when_cooldown_zero(self, pipeline_worker):
         """Test that empty set is returned when cooldown is 0."""
         with patch.dict(os.environ, {"CATEGORY_COOLDOWN_DAYS": "0"}, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             mock_supabase = MagicMock()
@@ -144,11 +156,10 @@ class TestGetRecentlyUsedCategories:
             # Should not query Supabase
             mock_supabase.table.assert_not_called()
 
-    def test_queries_supabase_correctly(self):
+    def test_queries_supabase_correctly(self, pipeline_worker):
         """Test that Supabase is queried with correct date filter."""
         with patch.dict(os.environ, {"CATEGORY_COOLDOWN_DAYS": "7"}, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             mock_supabase = MagicMock()
@@ -164,11 +175,10 @@ class TestGetRecentlyUsedCategories:
             # Verify the query was made to the correct table
             mock_supabase.table.assert_called_once()
 
-    def test_handles_supabase_error_gracefully(self):
+    def test_handles_supabase_error_gracefully(self, pipeline_worker):
         """Test that Supabase errors don't crash the function."""
         with patch.dict(os.environ, {"CATEGORY_COOLDOWN_DAYS": "7"}, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
             mock_supabase = MagicMock()
@@ -183,10 +193,9 @@ class TestGetRecentlyUsedCategories:
 class TestRecordCategoryUsed:
     """Test recording category usage."""
 
-    def test_records_category_usage(self):
+    def test_records_category_usage(self, pipeline_worker):
         """Test that category usage is recorded correctly."""
         import importlib
-        import pipeline_worker
         importlib.reload(pipeline_worker)
         
         mock_supabase = MagicMock()
@@ -202,10 +211,9 @@ class TestRecordCategoryUsed:
         mock_supabase.table.assert_called_once()
         mock_supabase.table.return_value.upsert.assert_called_once()
 
-    def test_handles_supabase_error_gracefully(self):
+    def test_handles_supabase_error_gracefully(self, pipeline_worker):
         """Test that errors don't crash the function."""
         import importlib
-        import pipeline_worker
         importlib.reload(pipeline_worker)
         
         mock_supabase = MagicMock()
@@ -223,10 +231,9 @@ class TestRecordCategoryUsed:
 class TestLoadCategories:
     """Test loading categories from file."""
 
-    def test_load_categories_success(self):
+    def test_load_categories_success(self, pipeline_worker):
         """Test loading categories from a valid JSON file."""
         import importlib
-        import pipeline_worker
         importlib.reload(pipeline_worker)
         
         # The actual categories file should exist
@@ -236,20 +243,15 @@ class TestLoadCategories:
         assert len(categories) > 0
         assert all(isinstance(c, str) for c in categories)
 
-    def test_load_categories_file_not_found(self):
+    def test_load_categories_file_not_found(self, pipeline_worker):
         """Test error handling when file doesn't exist."""
         with patch.dict(os.environ, {"CATEGORIES_FILE": "/nonexistent/file.json"}, clear=False):
             import importlib
-            import pipeline_worker
             importlib.reload(pipeline_worker)
             
-            try:
+            with pytest.raises(FileNotFoundError):
                 pipeline_worker.load_categories()
-                assert False, "Should have raised FileNotFoundError"
-            except FileNotFoundError:
-                pass
 
 
 if __name__ == "__main__":
-    import pytest
     pytest.main([__file__, "-v"])
