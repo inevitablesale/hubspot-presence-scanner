@@ -33,6 +33,19 @@ from .email_generator import (
     generate_version_a_email,
     generate_version_b_email,
     generate_subject_lines_ab,
+    # NEW: Persona and variant support
+    CLOSESPARK_PROFILE,
+    PERSONA_MAP,
+    EMAIL_VARIANTS,
+    SUBJECT_VARIANTS,
+    PersonaEmail,
+    get_persona_for_email,
+    get_variant_for_tech,
+    generate_persona_outreach_email,
+    generate_outreach_email_with_persona,
+    # NEW: Variant suppression
+    get_unused_persona_for_domain,
+    select_variant_with_suppression,
 )
 from .tech_scanner import (
     scan_technologies,
@@ -74,6 +87,19 @@ __all__ = [
     "generate_version_a_email",
     "generate_version_b_email",
     "generate_subject_lines_ab",
+    # NEW: Persona and variant support
+    "CLOSESPARK_PROFILE",
+    "PERSONA_MAP",
+    "EMAIL_VARIANTS",
+    "SUBJECT_VARIANTS",
+    "PersonaEmail",
+    "get_persona_for_email",
+    "get_variant_for_tech",
+    "generate_persona_outreach_email",
+    "generate_outreach_email_with_persona",
+    # NEW: Variant suppression
+    "get_unused_persona_for_domain",
+    "select_variant_with_suppression",
     # Unified scanner
     "scan_technologies",
     "scan_technologies_batch",
