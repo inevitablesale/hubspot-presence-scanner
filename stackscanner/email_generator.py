@@ -520,9 +520,11 @@ EMAIL_VARIANTS = {
     ],
 }
 
-# Subject variants per persona and MainTech
-SUBJECT_VARIANTS = {
-    "scott@closespark.co": {
+# Subject variants organized by tone (instead of hardcoded email addresses)
+# The system uses persona tone to select appropriate subject style
+SUBJECT_VARIANTS_BY_TONE = {
+    "technical": {
+        # Concise, technical, straight to the point
         "Shopify": [
             "Shopify integration issue on {{domain}}?",
             "Quick Shopify improvement idea for {{domain}}",
@@ -574,7 +576,8 @@ SUBJECT_VARIANTS = {
             "Noticed your WooCommerce store",
         ],
     },
-    "tracy@closespark.co": {
+    "formal": {
+        # Structured, slightly more formal
         "Shopify": [
             "Technical review: Shopify on {{domain}}",
             "Shopify integration assessment for {{domain}}",
@@ -626,59 +629,81 @@ SUBJECT_VARIANTS = {
             "Following up on your WooCommerce store",
         ],
     },
-    "willa@closespark.co": {
+    "friendly": {
+        # Friendly but still professional
         "Shopify": [
-            "Hi from CloseSpark — Shopify help for {{domain}}",
             "Quick idea for your Shopify store",
             "Reaching out about your Shopify setup",
+            "Shopify help for {{domain}}",
         ],
         "Salesforce": [
-            "Hi from CloseSpark — Salesforce help for {{domain}}",
             "Quick idea for your Salesforce setup",
             "Reaching out about your Salesforce",
+            "Salesforce help for {{domain}}",
         ],
         "WordPress": [
-            "Hi from CloseSpark — WordPress help for {{domain}}",
             "Quick idea for your WordPress site",
             "Reaching out about your WordPress setup",
+            "WordPress help for {{domain}}",
         ],
         "HubSpot": [
-            "Hi from CloseSpark — HubSpot help for {{domain}}",
             "Quick idea for your HubSpot setup",
             "Reaching out about your HubSpot",
+            "HubSpot help for {{domain}}",
         ],
         "Klaviyo": [
-            "Hi from CloseSpark — Klaviyo help for {{domain}}",
             "Quick idea for your Klaviyo flows",
             "Reaching out about your Klaviyo setup",
+            "Klaviyo help for {{domain}}",
         ],
         "Google Analytics": [
-            "Hi from CloseSpark — Analytics help for {{domain}}",
             "Quick idea for your analytics setup",
             "Reaching out about your tracking",
+            "Analytics help for {{domain}}",
         ],
         "GA4": [
-            "Hi from CloseSpark — GA4 help for {{domain}}",
             "Quick idea for your GA4 setup",
             "Reaching out about your analytics",
+            "GA4 help for {{domain}}",
         ],
         "Magento": [
-            "Hi from CloseSpark — Magento help for {{domain}}",
             "Quick idea for your Magento store",
             "Reaching out about your Magento setup",
+            "Magento help for {{domain}}",
         ],
         "Stripe": [
-            "Hi from CloseSpark — Stripe help for {{domain}}",
             "Quick idea for your Stripe integration",
             "Reaching out about your Stripe setup",
+            "Stripe help for {{domain}}",
         ],
         "WooCommerce": [
-            "Hi from CloseSpark — WooCommerce help for {{domain}}",
             "Quick idea for your WooCommerce store",
             "Reaching out about your WooCommerce setup",
+            "WooCommerce help for {{domain}}",
         ],
     },
 }
+
+# Legacy SUBJECT_VARIANTS - dynamically built from PERSONA_MAP
+# Maps email addresses to subject variants based on their persona tone
+def _build_subject_variants() -> dict:
+    """Build SUBJECT_VARIANTS from PERSONA_MAP and tone-based templates."""
+    result = {}
+    for email, persona_info in PERSONA_MAP.items():
+        tone = persona_info.get("tone", "technical")
+        # Map tone keywords to our categories
+        if "friendly" in tone.lower():
+            tone_key = "friendly"
+        elif "formal" in tone.lower() or "structured" in tone.lower():
+            tone_key = "formal"
+        else:
+            tone_key = "technical"
+        
+        result[email] = SUBJECT_VARIANTS_BY_TONE.get(tone_key, SUBJECT_VARIANTS_BY_TONE["technical"])
+    return result
+
+
+SUBJECT_VARIANTS = _build_subject_variants()
 
 # 12 Technology Categories with representative technologies
 TECHNOLOGY_CATEGORIES = {
