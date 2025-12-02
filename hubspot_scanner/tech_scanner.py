@@ -16,6 +16,7 @@ import requests
 from .tech_detector import TechDetector, TechDetectionResult
 from .tech_scorer import score_technologies, get_highest_value_tech, to_dict
 from .email_generator import generate_outreach_email, GeneratedEmail
+from .email_extractor import extract_emails_from_html
 
 
 DEFAULT_TIMEOUT = 10
@@ -27,12 +28,23 @@ DEFAULT_USER_AGENT = (
 
 @dataclass
 class TechScanResult:
-    """Complete result of technology scan with scoring and email."""
+    """Complete result of technology scan with scoring and email.
+    
+    Attributes:
+        domain: The scanned domain name.
+        technologies: List of detected technology names.
+        scored_technologies: List of technologies with scores and categories.
+        top_technology: The highest-scored technology detected.
+        emails: List of extracted email addresses from the page (non-generic).
+        generated_email: AI-generated outreach email content (if requested).
+        error: Error message if scan failed, None otherwise.
+    """
 
     domain: str
     technologies: list[str] = field(default_factory=list)
     scored_technologies: list[dict[str, Any]] = field(default_factory=list)
     top_technology: dict[str, Any] | None = None
+    emails: list[str] = field(default_factory=list)
     generated_email: dict[str, Any] | None = None
     error: str | None = None
 
@@ -43,6 +55,7 @@ class TechScanResult:
             "technologies": self.technologies,
             "scored_technologies": self.scored_technologies,
             "top_technology": self.top_technology,
+            "emails": self.emails,
             "generated_email": self.generated_email,
             "error": self.error,
         }
@@ -164,6 +177,9 @@ def scan_technologies(
             scored_technologies=[],
         )
 
+    # Extract emails only when technologies are detected
+    extracted_emails = sorted(extract_emails_from_html(html_content, domain))
+
     # Score technologies
     scored = score_technologies(detection_result.technologies)
     scored_dicts = [to_dict(s) for s in scored]
@@ -188,6 +204,7 @@ def scan_technologies(
         technologies=detection_result.technologies,
         scored_technologies=scored_dicts,
         top_technology=top_tech_dict,
+        emails=extracted_emails,
         generated_email=email_dict,
     )
 
