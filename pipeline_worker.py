@@ -493,7 +493,7 @@ def run_technology_scans(supabase, domains: list[str], category: str) -> list[di
                 has_email = result.generated_email is not None
                 if has_email:
                     email_generated_count += 1
-                top_tech_name = result.top_technology["name"] if result.top_technology else "N/A"
+                top_tech_name = result.top_technology.get("name", "N/A") if result.top_technology else "N/A"
                 logger.info(f"  ✓ {tech_count} technologies detected (top: {top_tech_name}, email: {'Yes' if has_email else 'No'}) [{domain_elapsed:.1f}s]")
                 if result.technologies[:5]:
                     logger.info(f"    Technologies: {', '.join(result.technologies[:5])}")
