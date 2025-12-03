@@ -164,6 +164,17 @@ create table if not exists domains_seen (
     times_scanned int default 1
 );
 
+-- Track which categories have been processed for rotation
+create table if not exists categories_used (
+    id uuid primary key default gen_random_uuid(),
+    category text not null,
+    used_date date not null default current_date,
+    domains_found int default 0,
+    domains_new int default 0,
+    created_at timestamptz default now(),
+    constraint categories_used_unique unique (category, used_date)
+);
+
 -- Calendly booking records for conversion analytics
 create table if not exists calendly_bookings (
     id uuid primary key default gen_random_uuid(),
@@ -207,6 +218,7 @@ create index if not exists idx_tech_scans_domain on tech_scans(domain);
 create index if not exists idx_tech_scans_emailed on tech_scans(emailed);
 create index if not exists idx_tech_scans_booked on tech_scans(booked);
 create index if not exists idx_domains_seen_domain on domains_seen(domain);
+create index if not exists idx_categories_used_date on categories_used(used_date desc);
 ```
 
 See `config/supabase_schema.sql` for the complete schema including analytics views and triggers.
