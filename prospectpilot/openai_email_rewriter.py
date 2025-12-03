@@ -1,4 +1,4 @@
-# stackscanner/openai_email_rewriter.py
+# prospectpilot/openai_email_rewriter.py
 
 import json
 import logging

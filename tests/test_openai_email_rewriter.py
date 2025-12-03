@@ -19,7 +19,7 @@ import pytest
 @pytest.fixture(autouse=True)
 def reset_client():
     """Reset the global client before each test."""
-    import stackscanner.openai_email_rewriter as rewriter
+    import prospectpilot.openai_email_rewriter as rewriter
     rewriter._client = None
     yield
     rewriter._client = None
@@ -30,7 +30,7 @@ class TestGetClient:
 
     def test_returns_none_when_no_api_key(self):
         """Test that None is returned when OPENAI_API_KEY is not set."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         with patch.dict(os.environ, {}, clear=True):
             # Remove OPENAI_API_KEY if present
@@ -42,7 +42,7 @@ class TestGetClient:
 
     def test_returns_none_when_openai_not_installed(self):
         """Test that None is returned when openai package is not available."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
             original_openai = rewriter.OpenAI
@@ -57,7 +57,7 @@ class TestGetClient:
 
     def test_caches_client(self):
         """Test that the client is cached after first creation."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         mock_client = MagicMock()
         mock_openai_class = MagicMock(return_value=mock_client)
@@ -80,7 +80,7 @@ class TestRewriteEmailWithOpenai:
 
     def test_returns_original_when_no_client(self):
         """Test that original content is returned when client is not available."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("OPENAI_API_KEY", None)
@@ -99,7 +99,7 @@ class TestRewriteEmailWithOpenai:
 
     def test_returns_rewritten_content_on_success(self):
         """Test that rewritten content is returned on successful API call."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         # Create mock response
         mock_message = MagicMock()
@@ -133,7 +133,7 @@ class TestRewriteEmailWithOpenai:
 
     def test_returns_original_on_api_error(self):
         """Test that original content is returned when API call fails."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = Exception("API Error")
@@ -153,7 +153,7 @@ class TestRewriteEmailWithOpenai:
 
     def test_returns_original_on_invalid_json_response(self):
         """Test that original content is returned when API returns invalid JSON."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         mock_message = MagicMock()
         mock_message.content = "not valid json"
@@ -182,7 +182,7 @@ class TestRewriteEmailWithOpenai:
 
     def test_metadata_includes_model_and_temperature(self):
         """Test that metadata includes model and temperature settings."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("OPENAI_API_KEY", None)
@@ -199,7 +199,7 @@ class TestRewriteEmailWithOpenai:
 
     def test_falls_back_to_original_when_subject_missing(self):
         """Test fallback when API response is missing subject."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         mock_message = MagicMock()
         mock_message.content = json.dumps({"body": "New Body"})
@@ -227,7 +227,7 @@ class TestRewriteEmailWithOpenai:
 
     def test_falls_back_to_original_when_body_missing(self):
         """Test fallback when API response is missing body."""
-        import stackscanner.openai_email_rewriter as rewriter
+        import prospectpilot.openai_email_rewriter as rewriter
         
         mock_message = MagicMock()
         mock_message.content = json.dumps({"subject": "New Subject"})
@@ -259,12 +259,12 @@ class TestEmailGeneratorIntegration:
 
     def test_generate_persona_outreach_email_includes_metadata(self):
         """Test that generate_persona_outreach_email includes rewrite metadata."""
-        from stackscanner.email_generator import generate_persona_outreach_email
+        from prospectpilot.email_generator import generate_persona_outreach_email
         
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("OPENAI_API_KEY", None)
             
-            import stackscanner.openai_email_rewriter as rewriter
+            import prospectpilot.openai_email_rewriter as rewriter
             rewriter._client = None
             
             email = generate_persona_outreach_email(
@@ -280,8 +280,8 @@ class TestEmailGeneratorIntegration:
 
     def test_generate_persona_outreach_email_with_mock_openai(self):
         """Test email generation with mocked OpenAI success."""
-        from stackscanner.email_generator import generate_persona_outreach_email
-        import stackscanner.openai_email_rewriter as rewriter
+        from prospectpilot.email_generator import generate_persona_outreach_email
+        import prospectpilot.openai_email_rewriter as rewriter
         
         # Create mock response
         mock_message = MagicMock()

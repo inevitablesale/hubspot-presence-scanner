@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Setup script for Tech Stack Scanner."""
+"""Setup script for ProspectPilot."""
 
 from setuptools import setup, find_packages
 
@@ -10,13 +10,13 @@ with open("requirements.txt", "r", encoding="utf-8") as f:
     requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
 setup(
-    name="stackscan-automation",
+    name="prospectpilot",
     version="1.0.0",
-    author="Stack Scanner Team",
-    description="Detect technology stacks on websites and generate personalized outreach emails",
+    author="ProspectPilot Team",
+    description="Autonomous AI-Powered Outbound Engine for Technical Consultants, Agencies & RevOps Teams",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/closespark/stackscan-automation",
+    url="https://github.com/closespark/prospectpilot",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
@@ -34,8 +34,7 @@ setup(
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "stack-scanner=stackscanner.cli:main",
-            "tech-scanner=stackscanner.tech_cli:main",
+            "prospectpilot=prospectpilot.tech_cli:main",
         ],
     },
 )

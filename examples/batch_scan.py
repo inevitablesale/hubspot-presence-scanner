@@ -5,7 +5,7 @@ Example: Batch scanning multiple domains.
 This example demonstrates how to scan multiple domains and process results.
 """
 
-from stackscanner import scan_domains
+from prospectpilot import scan_domains
 import json
 
 
