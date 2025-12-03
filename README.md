@@ -45,8 +45,9 @@ The entire pipeline runs daily as a cron job. Configure it once, deploy to Rende
    - [2. Apify Setup (Google Places Scraping)](#2-apify-setup-google-places-scraping)
    - [3. Zapmail/SMTP Setup](#3-zapmailsmtp-setup)
    - [4. Calendly Setup](#4-calendly-setup)
-   - [5. Company Profile & Personas](#5-company-profile--personas)
-   - [6. Render Deployment](#6-render-deployment)
+   - [5. OpenAI Setup (Optional)](#5-openai-setup-optional)
+   - [6. Company Profile & Personas](#6-company-profile--personas)
+   - [7. Render Deployment](#7-render-deployment)
 4. [Environment Variables Reference](#environment-variables-reference)
 5. [Architecture](#architecture)
 6. [Email Generation](#email-generation)
@@ -315,7 +316,50 @@ CALENDLY_API_TOKEN=your_personal_access_token
 
 ---
 
-### 5. Company Profile & Personas
+### 5. OpenAI Setup (Optional)
+
+OpenAI is used to rewrite outreach emails for improved deliverability and clarity. This is optional but recommended for better email performance.
+
+#### How It Works
+
+When configured, the system sends your generated email templates through OpenAI's API to:
+- Optimize emails for deliverability (avoiding spam triggers)
+- Keep tone professional, friendly, and conversational
+- Maintain the original intent and all key details (links, names, rates)
+- Keep emails concise (80-140 words)
+
+If OpenAI is not configured, emails are sent using the original templates without modification.
+
+#### Get Your OpenAI API Key
+
+1. Go to [platform.openai.com](https://platform.openai.com)
+2. Navigate to **API Keys** in your account settings
+3. Click **Create new secret key**
+4. Copy the key (it won't be shown again)
+
+Set the environment variable:
+```bash
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+#### Optional Configuration
+
+You can customize the OpenAI behavior with these optional variables:
+
+```bash
+# Model to use (default: gpt-4.1-mini)
+OPENAI_MODEL=gpt-4.1-mini
+
+# Temperature for generation (default: 0.4, lower = more consistent)
+OPENAI_EMAIL_TEMPERATURE=0.4
+
+# Max tokens for response (default: 400)
+OPENAI_EMAIL_MAX_TOKENS=400
+```
+
+---
+
+### 6. Company Profile & Personas
 
 All company details and persona information are configured via environment variables.
 
@@ -361,7 +405,7 @@ PERSONA_MAP_JSON='{
 
 ---
 
-### 6. Render Deployment
+### 7. Render Deployment
 
 Deploy to Render using the included `render.yaml` configuration.
 
@@ -454,6 +498,10 @@ python scripts/preview_email.py --tech Shopify --from john@yourdomain.com
 | `COMPANY_GITHUB` | `""` | GitHub/portfolio URL |
 | `PERSONA_MAP_JSON` | `""` | JSON mapping emails to personas |
 | `CALENDLY_API_TOKEN` | `""` | Calendly token for booking sync |
+| `OPENAI_API_KEY` | `""` | OpenAI API key for email rewriting |
+| `OPENAI_MODEL` | `gpt-4.1-mini` | OpenAI model to use |
+| `OPENAI_EMAIL_TEMPERATURE` | `0.4` | Temperature for email generation |
+| `OPENAI_EMAIL_MAX_TOKENS` | `400` | Max tokens for email response |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 | `APIFY_MAX_PLACES` | `1000` | Max places per search |
 | `APIFY_ACTOR` | `compass/crawler-google-places` | Apify actor ID |
@@ -717,6 +765,7 @@ Technologies are scored 1-5 based on value/specialization:
 - apify-client
 - supabase
 - python-dotenv
+- openai (optional, for email rewriting)
 
 ## License
 
