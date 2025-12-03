@@ -18,7 +18,6 @@ Environment Variables Required:
 
 Optional Environment Variables:
     OUTREACH_TABLE: Table with leads (default: tech_scans)
-                    Set to 'hubspot_scans' for legacy HubSpot-only mode
     OUTREACH_DAILY_LIMIT: Max emails per day (default: 500)
     OUTREACH_PER_INBOX_LIMIT: Max emails per inbox (default: 50)
     SMTP_SEND_DELAY_SECONDS: Delay between emails (default: 4)
@@ -197,9 +196,6 @@ def fetch_leads(supabase) -> list[dict]:
     - have technologies detected
     - not emailed yet
 
-    For tech_scans table: filters by technologies not empty
-    For hubspot_scans table (legacy): filters by hubspot_detected=true
-
     Args:
         supabase: Supabase client instance
 
@@ -214,28 +210,14 @@ def fetch_leads(supabase) -> list[dict]:
     
     start_time = time.time()
     
-    # Build query based on table type
-    if OUTREACH_TABLE == "hubspot_scans":
-        # Legacy HubSpot mode: filter by hubspot_detected
-        logger.info("Filters: hubspot_detected=true, emailed=null")
-        query = (
-            supabase.table(OUTREACH_TABLE)
-            .select("*")
-            .eq("hubspot_detected", True)
-            .is_("emailed", "null")
-            .limit(DAILY_LIMIT)
-            .execute()
-        )
-    else:
-        # Tech scans mode: filter by having technologies (not empty array)
-        logger.info("Filters: emailed=null (with technologies and emails)")
-        query = (
-            supabase.table(OUTREACH_TABLE)
-            .select("*")
-            .is_("emailed", "null")
-            .limit(DAILY_LIMIT)
-            .execute()
-        )
+    logger.info("Filters: emailed=null (with technologies and emails)")
+    query = (
+        supabase.table(OUTREACH_TABLE)
+        .select("*")
+        .is_("emailed", "null")
+        .limit(DAILY_LIMIT)
+        .execute()
+    )
     
     elapsed = time.time() - start_time
     
