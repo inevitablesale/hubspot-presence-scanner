@@ -5,7 +5,7 @@ Example: Basic usage of the HubSpot Presence Scanner.
 This example demonstrates how to scan a single domain programmatically.
 """
 
-from stackscanner import scan_domain
+from prospectpilot import scan_domain
 import json
 
 

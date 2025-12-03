@@ -9,7 +9,7 @@ These tests verify that:
 
 import pytest
 
-from stackscanner.tech_scorer import (
+from prospectpilot.tech_scorer import (
     get_highest_value_tech,
     score_technologies,
     TECH_BLACKLIST,

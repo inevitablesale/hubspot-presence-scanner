@@ -37,7 +37,7 @@ from email.mime.text import MIMEText
 
 from supabase import create_client
 
-from stackscanner.email_generator import (
+from prospectpilot.email_generator import (
     generate_outreach_email_with_persona,
     get_persona_for_email,
     CLOSESPARK_PROFILE,

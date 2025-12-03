@@ -10,7 +10,7 @@ This example shows how to:
 
 import json
 
-from stackscanner import (
+from prospectpilot import (
     scan_technologies,
     scan_technologies_batch,
     TechDetector,

@@ -100,16 +100,16 @@ pip install -e .
 
 ```bash
 # Scan a domain
-prospectpilot scan example.com
+prospectpilot example.com
 
 # Scan multiple domains
-prospectpilot scan shopify.com stripe.com
+prospectpilot shopify.com stripe.com
 
 # Save JSON output
-prospectpilot scan -f domains.txt -o results.json
+prospectpilot -f domains.txt -o results.json
 
 # Skip email generation
-prospectpilot scan example.com --no-email
+prospectpilot example.com --no-email
 ```
 
 ### Python Library

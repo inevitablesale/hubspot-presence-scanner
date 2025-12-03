@@ -42,7 +42,7 @@ from datetime import date, timedelta
 from apify_client import ApifyClient
 from supabase import create_client
 
-from stackscanner import scan_technologies
+from prospectpilot import scan_technologies
 
 
 # ---------- LOGGING SETUP ----------

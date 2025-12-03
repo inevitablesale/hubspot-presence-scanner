@@ -26,13 +26,13 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from stackscanner.email_generator import (
+from prospectpilot.email_generator import (
     generate_persona_outreach_email,
     get_persona_for_email,
     get_variant_for_tech,
     COMPANY_PROFILE,
 )
-from stackscanner.openai_email_rewriter import rewrite_email_with_openai
+from prospectpilot.openai_email_rewriter import rewrite_email_with_openai
 
 
 def build_raw_email(domain, tech, supporting_techs, from_email):

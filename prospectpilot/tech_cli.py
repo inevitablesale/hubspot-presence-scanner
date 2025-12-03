@@ -101,22 +101,22 @@ def main() -> int:
         epilog="""
 Examples:
   # Scan a single domain
-  tech-scanner example.com
+  prospectpilot example.com
 
   # Scan multiple domains
-  tech-scanner example.com another-site.com shopify.com
+  prospectpilot example.com another-site.com shopify.com
 
   # Scan domains from a file
-  tech-scanner -f domains.txt
+  prospectpilot -f domains.txt
 
   # Save results to a file
-  tech-scanner -f domains.txt -o results.json
+  prospectpilot -f domains.txt -o results.json
 
   # Quiet mode (no progress output)
-  tech-scanner -f domains.txt -q
+  prospectpilot -f domains.txt -q
 
   # Skip email generation
-  tech-scanner example.com --no-email
+  prospectpilot example.com --no-email
 
 Output Format:
   {

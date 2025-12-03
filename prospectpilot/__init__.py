@@ -1,4 +1,4 @@
-"""Tech Stack Scanner - Detect technology stacks on websites."""
+"""ProspectPilot - Autonomous AI-Powered Outbound Engine for Technical Consultants."""
 
 from .detector import HubSpotDetector, DetectionResult
 from .scanner import scan_domains, scan_domain
