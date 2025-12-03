@@ -140,4 +140,4 @@ The best monetization strategy is the one that makes money *now* while you learn
 
 ---
 
-*Last Updated: December 2024*
+*Last Updated: December 2025*
