@@ -33,6 +33,7 @@ create table if not exists tech_scans (
 );
 
 -- Table for tracking processed domains (deduplication)
+-- This ensures we never crawl the same domain twice
 create table if not exists domains_seen (
     domain text primary key,
     category text,
@@ -40,6 +41,28 @@ create table if not exists domains_seen (
     last_scanned timestamptz default now(),
     times_scanned int default 1
 );
+
+-- ============================================================================
+-- CATEGORIES USED: Category Rotation Tracking
+-- ============================================================================
+-- Tracks which categories have been processed to ensure category rotation.
+-- This prevents the same category from being searched multiple times before
+-- all categories have been used, ensuring diverse lead generation.
+
+create table if not exists categories_used (
+    id uuid primary key default gen_random_uuid(),
+    category text not null,
+    used_date date not null default current_date,
+    domains_found int default 0,
+    domains_new int default 0,
+    created_at timestamptz default now(),
+    -- Unique constraint: one entry per category per day
+    constraint categories_used_unique unique (category, used_date)
+);
+
+-- Index for efficient category lookups
+create index if not exists idx_categories_used_category on categories_used(category);
+create index if not exists idx_categories_used_date on categories_used(used_date desc);
 
 -- ============================================================================
 -- EMAIL STATS: Per-Variant Analytics

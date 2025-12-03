@@ -433,6 +433,8 @@ python scripts/preview_email.py --tech Shopify --from john@yourdomain.com
 | `OUTREACH_PER_INBOX_LIMIT` | `50` | Max emails per inbox |
 | `SMTP_SEND_DELAY_SECONDS` | `4` | Delay between emails |
 | `SCANNER_MAX_EMAIL_PAGES` | `10` | Max pages to crawl for emails |
+| `CATEGORY_COOLDOWN_DAYS` | `7` | Days before a category can be reused |
+| `SUPABASE_CATEGORIES_TABLE` | `categories_used` | Table for tracking used categories |
 
 ---
 
@@ -467,6 +469,45 @@ The system runs as a daily cron job (`daily_worker.py`) executing three workers 
 │     └── Save conversion analytics                               │
 │                                                                  │
 └─────────────────────────────────────────────────────────────────┘
+```
+
+### Deduplication Mechanisms
+
+The system includes three layers of deduplication to prevent redundant work:
+
+#### 1. Domain Deduplication
+
+The `domains_seen` table tracks every domain that has been crawled. Before scanning a domain:
+- The pipeline checks if the domain exists in `domains_seen`
+- Only new (never-seen) domains are scanned
+- Each domain is added to the table after first crawl
+
+This ensures **no domain is ever crawled twice**.
+
+#### 2. Email Deduplication
+
+The `emailed` field on each lead record tracks email status:
+- Leads are only fetched if `emailed = null`
+- After sending, the lead is marked `emailed = true` with timestamp
+- This is checked at query time for efficiency
+
+This ensures **no lead receives duplicate emails**.
+
+#### 3. Category Rotation & Cooldown
+
+The `categories_used` table tracks which business categories have been processed:
+- Before selecting a category, the pipeline checks recently used categories
+- Categories used within the cooldown period (`CATEGORY_COOLDOWN_DAYS`, default: 7) are skipped
+- Falls back to deterministic selection if all categories are in cooldown
+
+This ensures **diverse lead generation across business categories**.
+
+```sql
+-- View recently used categories
+SELECT category, used_date, domains_found, domains_new
+FROM categories_used
+ORDER BY used_date DESC
+LIMIT 10;
 ```
 
 ---

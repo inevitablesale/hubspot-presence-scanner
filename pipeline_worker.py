@@ -37,7 +37,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date
+from datetime import date, timedelta
 
 from apify_client import ApifyClient
 from supabase import create_client
@@ -82,6 +82,7 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 SUPABASE_TABLE = os.getenv("SUPABASE_TABLE", "tech_scans")
 SUPABASE_DOMAIN_TABLE = os.getenv("SUPABASE_DOMAIN_TABLE", "domains_seen")
+SUPABASE_CATEGORIES_TABLE = os.getenv("SUPABASE_CATEGORIES_TABLE", "categories_used")
 
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
 APIFY_ACTOR = os.getenv("APIFY_ACTOR", "compass/crawler-google-places")
@@ -91,6 +92,11 @@ APIFY_RUN_TIMEOUT = int(os.getenv("APIFY_RUN_TIMEOUT", "3600"))  # seconds (1 ho
 
 CATEGORIES_FILE = os.getenv("CATEGORIES_FILE", "config/categories-250.json")
 SCANNER_DISABLE_EMAIL_GENERATION = os.getenv("SCANNER_DISABLE_EMAIL_GENERATION", "false").lower() == "true"
+
+# Category rotation settings
+# CATEGORY_COOLDOWN_DAYS: Number of days before a category can be reused
+# Set to 0 to disable cooldown and allow immediate reuse
+CATEGORY_COOLDOWN_DAYS = int(os.getenv("CATEGORY_COOLDOWN_DAYS", "7"))
 
 
 def log_config():
@@ -102,12 +108,14 @@ def log_config():
     logger.info(f"  SUPABASE_SERVICE_KEY: {'[SET]' if SUPABASE_SERVICE_KEY else '[NOT SET]'}")
     logger.info(f"  SUPABASE_TABLE: {SUPABASE_TABLE}")
     logger.info(f"  SUPABASE_DOMAIN_TABLE: {SUPABASE_DOMAIN_TABLE}")
+    logger.info(f"  SUPABASE_CATEGORIES_TABLE: {SUPABASE_CATEGORIES_TABLE}")
     logger.info(f"  APIFY_TOKEN: {'[SET]' if APIFY_TOKEN else '[NOT SET]'}")
     logger.info(f"  APIFY_ACTOR: {APIFY_ACTOR}")
     logger.info(f"  APIFY_MAX_PLACES: {APIFY_MAX_PLACES}")
     logger.info(f"  APIFY_POLL_INTERVAL: {APIFY_POLL_INTERVAL} seconds")
     logger.info(f"  APIFY_RUN_TIMEOUT: {APIFY_RUN_TIMEOUT} seconds")
     logger.info(f"  CATEGORIES_FILE: {CATEGORIES_FILE}")
+    logger.info(f"  CATEGORY_COOLDOWN_DAYS: {CATEGORY_COOLDOWN_DAYS}")
     logger.info(f"  SCANNER_DISABLE_EMAIL_GENERATION: {SCANNER_DISABLE_EMAIL_GENERATION}")
     logger.info("=" * 60)
 
@@ -162,26 +170,148 @@ def load_categories() -> list[str]:
         raise ValueError(f"Invalid JSON in categories file: {e}")
 
 
-def pick_today_category(categories: list[str]) -> str:
+def get_recently_used_categories(supabase, days: int = 7) -> set[str]:
     """
-    Deterministic rotation: one category per day based on date.
-    No external state required.
+    Get categories that have been used within the cooldown period.
+
+    This prevents the same category from being searched multiple times
+    within a short period, ensuring diverse lead generation.
+
+    Args:
+        supabase: Supabase client instance
+        days: Number of days to look back (cooldown period)
+
+    Returns:
+        Set of category names used within the cooldown period
+    """
+    if days <= 0:
+        logger.info("Category cooldown disabled (CATEGORY_COOLDOWN_DAYS=0)")
+        return set()
+
+    logger.info(f"Checking recently used categories (last {days} days)...")
+    try:
+        # Calculate the cutoff date
+        cutoff_date = (date.today() - timedelta(days=days)).isoformat()
+
+        # Query Supabase for recently used categories
+        res = (
+            supabase.table(SUPABASE_CATEGORIES_TABLE)
+            .select("category")
+            .gte("used_date", cutoff_date)
+            .execute()
+        )
+
+        recently_used = {row["category"] for row in (res.data or [])}
+        logger.info(f"Found {len(recently_used)} categories used in last {days} days")
+        if recently_used and len(recently_used) <= 10:
+            logger.debug(f"Recently used: {recently_used}")
+        return recently_used
+
+    except Exception as e:
+        # If the table doesn't exist yet, return empty set
+        logger.warning(f"Could not check recently used categories: {e}")
+        logger.info("This may be expected on first run before table is created")
+        return set()
+
+
+def record_category_used(
+    supabase,
+    category: str,
+    domains_found: int = 0,
+    domains_new: int = 0,
+) -> None:
+    """
+    Record that a category was used today.
+
+    This tracks category usage for the cooldown system to prevent
+    repeating categories too frequently.
+
+    Args:
+        supabase: Supabase client instance
+        category: The category that was processed
+        domains_found: Number of domains found from the category
+        domains_new: Number of new (not previously seen) domains
+    """
+    logger.info(f"Recording category usage: {category}")
+    try:
+        today = date.today().isoformat()
+        row = {
+            "category": category,
+            "used_date": today,
+            "domains_found": domains_found,
+            "domains_new": domains_new,
+        }
+        supabase.table(SUPABASE_CATEGORIES_TABLE).upsert(
+            row, on_conflict="category,used_date"
+        ).execute()
+        logger.info(f"Category usage recorded: {category} on {today}")
+    except Exception as e:
+        # Don't fail the pipeline if tracking fails
+        logger.warning(f"Could not record category usage: {e}")
+
+
+def pick_today_category(categories: list[str], supabase=None) -> str:
+    """
+    Select today's category with cooldown enforcement.
+
+    Uses deterministic rotation based on date, but skips categories
+    that have been used within the cooldown period (CATEGORY_COOLDOWN_DAYS).
+
+    The algorithm:
+    1. Start with the deterministic category (date ordinal % len)
+    2. If cooldown is enabled and category was used recently, skip to next
+    3. Continue until an unused category is found
+    4. If all categories were used recently, use the deterministic one anyway
 
     Args:
         categories: List of category strings
+        supabase: Optional Supabase client for cooldown checking
 
     Returns:
         Today's category string
     """
+    # Check for manual override first
     override = os.getenv("CATEGORY_OVERRIDE")
     if override:
         logger.info(f"Using CATEGORY_OVERRIDE environment variable: {override}")
         return override
 
-    idx = date.today().toordinal() % len(categories)
-    selected_category = categories[idx]
-    logger.info(f"Selected category index {idx} of {len(categories)}: '{selected_category}'")
-    return selected_category
+    # Calculate deterministic starting index
+    start_idx = date.today().toordinal() % len(categories)
+    deterministic_category = categories[start_idx]
+    logger.info(f"Deterministic category index {start_idx} of {len(categories)}: '{deterministic_category}'")
+
+    # If cooldown is disabled or no Supabase client, use deterministic category
+    if CATEGORY_COOLDOWN_DAYS <= 0 or supabase is None:
+        logger.info("Category cooldown disabled, using deterministic selection")
+        return deterministic_category
+
+    # Get recently used categories
+    recently_used = get_recently_used_categories(supabase, CATEGORY_COOLDOWN_DAYS)
+
+    # If no categories were used recently, use deterministic
+    if not recently_used:
+        logger.info("No recently used categories found, using deterministic selection")
+        return deterministic_category
+
+    # If deterministic category wasn't used recently, use it
+    if deterministic_category not in recently_used:
+        logger.info(f"Deterministic category '{deterministic_category}' not in cooldown, using it")
+        return deterministic_category
+
+    # Find the first unused category starting from the deterministic index
+    logger.info(f"Deterministic category '{deterministic_category}' is in cooldown, finding alternative...")
+    for offset in range(1, len(categories)):
+        idx = (start_idx + offset) % len(categories)
+        candidate = categories[idx]
+        if candidate not in recently_used:
+            logger.info(f"Selected alternative category index {idx}: '{candidate}'")
+            return candidate
+
+    # All categories were used recently, fall back to deterministic
+    logger.warning(f"All {len(categories)} categories used within cooldown period!")
+    logger.warning(f"Falling back to deterministic category: '{deterministic_category}'")
+    return deterministic_category
 
 
 # ---------- APIFY / GOOGLE PLACES SCRAPE ----------
@@ -565,12 +695,12 @@ def main():
         supabase = get_supabase_client()
         apify_client = get_apify_client()
 
-        # Load and select category
+        # Load and select category (with cooldown enforcement)
         logger.info("=" * 60)
         logger.info("STEP: CATEGORY SELECTION")
         logger.info("=" * 60)
         categories = load_categories()
-        category = pick_today_category(categories)
+        category = pick_today_category(categories, supabase)
         category_idx = categories.index(category) if category in categories else -1
         logger.info(f"Today's category: '{category}' (index {category_idx} of {len(categories)})")
 
@@ -579,6 +709,8 @@ def main():
 
         if not domains:
             logger.warning("No domains found from Google Places scrape. Exiting pipeline.")
+            # Record category usage even if no domains found
+            record_category_used(supabase, category, domains_found=0, domains_new=0)
             return
 
         # Deduplicate against Supabase
@@ -587,10 +719,15 @@ def main():
         if not new_domains:
             logger.info("All domains have been previously processed. No new domains to scan.")
             logger.info("Pipeline completed successfully (no work needed)")
+            # Record category usage with domain counts
+            record_category_used(supabase, category, domains_found=len(domains), domains_new=0)
             return
 
         # Run technology scans
         results = run_technology_scans(supabase, new_domains, category)
+
+        # Record category usage with domain counts
+        record_category_used(supabase, category, domains_found=len(domains), domains_new=len(new_domains))
 
         # Print summary
         pipeline_elapsed = time.time() - pipeline_start_time
