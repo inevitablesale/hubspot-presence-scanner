@@ -371,92 +371,94 @@ def run_outreach() -> dict[str, int]:
         logger.info(f"Daily limit: {DAILY_LIMIT}")
         logger.info(f"Per-inbox limit: {PER_INBOX_LIMIT}")
         logger.info(f"Delay between emails: {SEND_DELAY} seconds")
+        logger.info(f"Rotation mode: per-email (round-robin across all inboxes)")
 
         stats = {"sent": 0, "failed": 0, "skipped": 0}
-        leads_iterator = iter(leads)
-        current_lead = None
-        inbox_number = 0
+        # Track sends per inbox for per-inbox limit enforcement
+        inbox_send_counts = [0] * len(smtp_fleet)
+        # Current inbox index for round-robin rotation
+        smtp_index = 0
 
-        for smtp_conf in smtp_fleet:
-            sent_this_inbox = 0
-            inbox_number += 1
+        for lead in leads:
+            # Check global daily limit
+            if stats["sent"] >= DAILY_LIMIT:
+                logger.info("Hit global daily limit. Stopping email sending.")
+                break
+
+            # Get email list
+            email_list = lead.get("emails") or []
+            if not email_list:
+                stats["skipped"] += 1
+                logger.debug(f"Skipping lead {lead.get('domain')} - no emails")
+                continue
+
+            # Find an available inbox (round-robin, respecting per-inbox limit)
+            attempts = 0
+            while attempts < len(smtp_fleet):
+                if inbox_send_counts[smtp_index] < PER_INBOX_LIMIT:
+                    break
+                smtp_index = (smtp_index + 1) % len(smtp_fleet)
+                attempts += 1
+            
+            # If all inboxes have hit their limit, stop
+            if attempts >= len(smtp_fleet):
+                logger.info("All inboxes have reached their per-inbox limit. Stopping.")
+                break
+
+            smtp_conf = smtp_fleet[smtp_index]
             from_email = smtp_conf.get("email", smtp_conf.get("user", "unknown"))
             masked_inbox = from_email[:3] + "***" + from_email[from_email.find("@"):] if "@" in from_email else from_email[:3] + "***"
             
             # Get persona for this inbox
             persona = get_persona_for_email(from_email)
-            logger.info("-" * 60)
-            logger.info(f"INBOX {inbox_number}/{len(smtp_fleet)}: {masked_inbox}")
-            logger.info(f"  Persona: {persona['name']} ({persona['role']})")
-            logger.info(f"  Host: {smtp_conf.get('host', 'unknown')}:{smtp_conf.get('port', 587)}")
-            logger.info(f"  Capacity: {PER_INBOX_LIMIT} emails")
 
-            while sent_this_inbox < PER_INBOX_LIMIT and stats["sent"] < DAILY_LIMIT:
-                # Get next lead if we don't have one
-                if current_lead is None:
-                    try:
-                        current_lead = next(leads_iterator)
-                    except StopIteration:
-                        logger.info("  No more leads to process from queue")
-                        break
-
-                lead = current_lead
-                current_lead = None  # Mark as consumed
-
-                # Get email list
-                email_list = lead.get("emails") or []
-                if not email_list:
-                    stats["skipped"] += 1
-                    logger.debug(f"  Skipping lead {lead.get('domain')} - no emails")
-                    continue
-
-                # Pick first valid email
-                recipient = email_list[0]
-                domain = lead.get("domain", "your website")
-                lead_id = lead.get("id")
-                
-                # Get technologies from the lead (for persona-based email generation)
-                # Try different possible field names for technologies
-                technologies = (
-                    lead.get("technologies") or 
-                    lead.get("scored_technologies") or 
-                    []
+            # Pick first valid email
+            recipient = email_list[0]
+            domain = lead.get("domain", "your website")
+            lead_id = lead.get("id")
+            
+            # Get technologies from the lead (for persona-based email generation)
+            # Try different possible field names for technologies
+            technologies = (
+                lead.get("technologies") or 
+                lead.get("scored_technologies") or 
+                []
+            )
+            
+            # Extract tech names if they're dicts
+            if technologies and isinstance(technologies[0], dict):
+                technologies = [t.get("name", str(t)) for t in technologies]
+            
+            # Get top_technology as main tech if available
+            top_tech = lead.get("top_technology")
+            main_tech = None
+            if top_tech:
+                if isinstance(top_tech, dict):
+                    main_tech = top_tech.get("name")
+                elif isinstance(top_tech, str):
+                    main_tech = top_tech
+            
+            # If no main_tech but we have technologies, use first one
+            if not main_tech and technologies:
+                main_tech = technologies[0]
+            
+            # Generate persona-based email
+            email_data = None
+            if main_tech:
+                email_data = generate_outreach_email_with_persona(
+                    domain=domain,
+                    technologies=technologies if technologies else [main_tech],
+                    from_email=from_email,
                 )
-                
-                # Extract tech names if they're dicts
-                if technologies and isinstance(technologies[0], dict):
-                    technologies = [t.get("name", str(t)) for t in technologies]
-                
-                # Get top_technology as main tech if available
-                top_tech = lead.get("top_technology")
-                main_tech = None
-                if top_tech:
-                    if isinstance(top_tech, dict):
-                        main_tech = top_tech.get("name")
-                    elif isinstance(top_tech, str):
-                        main_tech = top_tech
-                
-                # If no main_tech but we have technologies, use first one
-                if not main_tech and technologies:
-                    main_tech = technologies[0]
-                
-                # Generate persona-based email
-                email_data = None
-                if main_tech:
-                    email_data = generate_outreach_email_with_persona(
-                        domain=domain,
-                        technologies=technologies if technologies else [main_tech],
-                        from_email=from_email,
-                    )
-                
-                if email_data:
-                    subject = email_data["subject"]
-                    body = email_data["body"]
-                    variant_id = email_data.get("variant_id", "unknown")
-                else:
-                    # Fallback to simple email if no tech data
-                    subject = f"Quick question about {domain}"
-                    body = f"""Hi — I'm {persona['name']} from CloseSpark in {CLOSESPARK_PROFILE['location']}.
+            
+            if email_data:
+                subject = email_data["subject"]
+                body = email_data["body"]
+                variant_id = email_data.get("variant_id", "unknown")
+            else:
+                # Fallback to simple email if no tech data
+                subject = f"Quick question about {domain}"
+                body = f"""Hi — I'm {persona['name']} from CloseSpark in {CLOSESPARK_PROFILE['location']}.
 
 I came across {domain} and wanted to reach out. I specialize in short-term technical fixes for web stacks — integration issues, automation gaps, and tracking problems.
 
@@ -472,42 +474,45 @@ If it would help to have a specialist jump in, you can grab time here:
 – {persona['name']}
 {persona['role']}, CloseSpark
 {CLOSESPARK_PROFILE['github']}"""
-                    variant_id = "fallback"
+                variant_id = "fallback"
 
-                try:
-                    email_start_time = time.time()
-                    success = send_email_smtp(
-                        smtp_conf,
-                        to_email=recipient,
-                        subject=subject,
-                        body=body,
-                    )
-                    email_elapsed = time.time() - email_start_time
+            try:
+                email_start_time = time.time()
+                success = send_email_smtp(
+                    smtp_conf,
+                    to_email=recipient,
+                    subject=subject,
+                    body=body,
+                )
+                email_elapsed = time.time() - email_start_time
 
-                    if success:
-                        logger.info(f"  ✓ [{stats['sent']+1}] Sent to {recipient} (domain: {domain}, variant: {variant_id}) [{email_elapsed:.1f}s]")
-                        mark_lead_emailed(supabase, lead_id)
-                        stats["sent"] += 1
-                        sent_this_inbox += 1
-                    else:
-                        logger.warning(f"  ✗ Failed to send to {recipient} (domain: {domain})")
-                        stats["failed"] += 1
-
-                except Exception as e:
-                    logger.error(f"  ✗ Error sending to {recipient}: {e}")
+                if success:
+                    logger.info(f"✓ [{stats['sent']+1}] Sent via {masked_inbox} to {recipient} (domain: {domain}, variant: {variant_id}) [{email_elapsed:.1f}s]")
+                    mark_lead_emailed(supabase, lead_id)
+                    stats["sent"] += 1
+                    inbox_send_counts[smtp_index] += 1
+                    # Rotate to next inbox only on success (round-robin)
+                    smtp_index = (smtp_index + 1) % len(smtp_fleet)
+                else:
+                    logger.warning(f"✗ Failed to send via {masked_inbox} to {recipient} (domain: {domain})")
                     stats["failed"] += 1
 
-                # Throttle to prevent rate limiting
-                if sent_this_inbox < PER_INBOX_LIMIT and stats["sent"] < DAILY_LIMIT:
-                    logger.debug(f"  Waiting {SEND_DELAY} seconds before next email...")
-                    time.sleep(SEND_DELAY)
+            except Exception as e:
+                logger.error(f"✗ Error sending via {masked_inbox} to {recipient}: {e}")
+                stats["failed"] += 1
 
-            logger.info(f"  Inbox {inbox_number} complete: {sent_this_inbox} emails sent")
+            # Throttle to prevent rate limiting
+            if stats["sent"] < DAILY_LIMIT:
+                logger.debug(f"Waiting {SEND_DELAY} seconds before next email...")
+                time.sleep(SEND_DELAY)
 
-            # Check if we've hit the daily limit
-            if stats["sent"] >= DAILY_LIMIT:
-                logger.info("Hit global daily limit. Stopping email sending.")
-                break
+        # Log per-inbox summary
+        logger.info("-" * 60)
+        logger.info("INBOX SUMMARY:")
+        for i, smtp_conf in enumerate(smtp_fleet):
+            from_email = smtp_conf.get("email", smtp_conf.get("user", "unknown"))
+            masked_inbox = from_email[:3] + "***" + from_email[from_email.find("@"):] if "@" in from_email else from_email[:3] + "***"
+            logger.info(f"  Inbox {i+1} ({masked_inbox}): {inbox_send_counts[i]} emails sent")
 
         # Print summary
         outreach_elapsed = time.time() - outreach_start_time
