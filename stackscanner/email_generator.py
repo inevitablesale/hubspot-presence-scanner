@@ -18,12 +18,16 @@ Environment Variables for Company Profile:
 """
 
 import json
+import logging
 import os
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from .tech_scorer import ScoredTechnology, get_highest_value_tech
+from .openai_email_rewriter import rewrite_email_with_openai
+
+logger = logging.getLogger(__name__)
 
 
 def _load_company_profile() -> dict[str, str]:
@@ -1690,6 +1694,7 @@ class PersonaEmail:
     persona_role: str
     variant_id: str
     domain: str
+    metadata: dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -1703,6 +1708,7 @@ class PersonaEmail:
             "persona_role": self.persona_role,
             "variant_id": self.variant_id,
             "domain": self.domain,
+            "metadata": self.metadata,
         }
 
 
@@ -1714,12 +1720,14 @@ def generate_persona_outreach_email(
     domain_history: dict[str, Any] | None = None,
 ) -> PersonaEmail:
     """
-    Generate a complete persona-based outreach email.
+    Generate a complete persona-based outreach email, then run it through OpenAI
+    for deliverability/clarity rewriting (active mode: always).
     
     This is the new primary email generation function that:
     - Takes main_tech, supporting_techs, domain, and persona (from_email) as inputs
     - Chooses one variant for that main_tech (random, with optional suppression)
-    - Returns subject, body, and metadata including variant_id
+    - Runs the email through OpenAI for deliverability/quality rewrite
+    - Returns subject, body, and metadata including variant_id and rewrite info
     
     Args:
         domain: The target domain
@@ -1741,10 +1749,10 @@ def generate_persona_outreach_email(
         variant = get_variant_for_tech(main_tech)
     
     # Generate subject
-    subject = get_subject_for_persona_tech(from_email, main_tech, domain)
+    base_subject = get_subject_for_persona_tech(from_email, main_tech, domain)
     
     # Generate body
-    body = generate_persona_email_body(
+    base_body = generate_persona_email_body(
         domain=domain,
         main_tech=main_tech,
         supporting_techs=supporting_techs,
@@ -1752,9 +1760,39 @@ def generate_persona_outreach_email(
         variant=variant,
     )
     
+    # Build context for OpenAI rewrite
+    context = {
+        "domain": domain,
+        "persona": persona["name"],
+        "persona_email": from_email,
+        "persona_role": persona["role"],
+        "company_name": COMPANY_PROFILE["company"],
+        "company_location": COMPANY_PROFILE["location"],
+        "company_rate": COMPANY_PROFILE["hourly_rate"],
+        "main_tech": main_tech,
+        "variant_id": variant["id"],
+    }
+    
+    # Run through OpenAI for deliverability/quality rewrite
+    rewritten_subject, rewritten_body, rewrite_meta = rewrite_email_with_openai(
+        subject=base_subject,
+        body=base_body,
+        context=context,
+    )
+    
+    # Build metadata
+    metadata: dict[str, Any] = {
+        "persona": persona["name"],
+        "persona_email": from_email,
+        "persona_role": persona["role"],
+        "main_tech": main_tech,
+        "variant_id": variant["id"],
+    }
+    metadata.update(rewrite_meta)
+    
     return PersonaEmail(
-        subject=subject,
-        body=body,
+        subject=rewritten_subject,
+        body=rewritten_body,
         main_tech=main_tech,
         supporting_techs=supporting_techs,
         persona=persona["name"],
@@ -1762,6 +1800,7 @@ def generate_persona_outreach_email(
         persona_role=persona["role"],
         variant_id=variant["id"],
         domain=domain,
+        metadata=metadata,
     )
 
 
