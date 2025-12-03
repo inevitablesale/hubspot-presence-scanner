@@ -19,6 +19,8 @@ services:
         value: tech_scans
       - key: SUPABASE_DOMAIN_TABLE
         value: domains_seen
+      - key: SUPABASE_CATEGORIES_TABLE
+        value: categories_used
       # Apify Configuration
       - key: APIFY_TOKEN
         sync: false
@@ -51,6 +53,28 @@ services:
         value: calendly_bookings
       - key: CALENDLY_LOOKBACK_DAYS
         value: "7"
+      # OpenAI Configuration (optional - for email rewriting)
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_EMAIL_TEMPERATURE
+        value: "0.4"
+      - key: OPENAI_EMAIL_MAX_TOKENS
+        value: "400"
+      # Company Profile Configuration (for email templates)
+      - key: COMPANY_NAME
+        sync: false
+      - key: COMPANY_LOCATION
+        sync: false
+      - key: COMPANY_HOURLY_RATE
+        sync: false
+      - key: COMPANY_GITHUB
+        sync: false
+      - key: COMPANY_CALENDLY
+        sync: false
+      - key: PERSONA_MAP_JSON
+        sync: false
 
 cronJobs:
   # Runs at 6:00 AM UTC daily - executes all workers sequentially:
