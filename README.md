@@ -45,6 +45,7 @@ ProspectPilot is a fully automated cold email engine and lead generation system 
 - Custom personas  
 - Custom email templates  
 - Custom categories  
+- Custom OpenAI prompt  
 
 **Does NOT include:**
 
@@ -70,7 +71,8 @@ Only available after purchasing Package 1 or Package 2.
 - Editing outreach logic  
 - Adjusting scoring rules  
 - Basic HubSpot/Salesforce field mapping  
-- Minor modifications to existing workers
+- Minor modifications to existing workers  
+- Integrations with Apollo, ZoomInfo, PhantomBuster
 
 ---
 
